@@ -352,44 +352,46 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     }
   }
 
-Future<void> _initializeScreen() async {
-  // ✅ Check if initialSalon was passed (from SalonProfileScreen or dashboard)
-  if (widget.initialSalon != null && !_isInitialized) {
-    debugPrint('🎯 Initial salon received: ${widget.initialSalon!['name']}');
-    
-    // ✅ Set the salon
-    setState(() {
-      _selectedSalon = widget.initialSalon;
-      _currentStep = 1; // Service step (skip salon selection)
-      _isInitialized = true;
-    });
-    
-    // ✅ CRITICAL: Load services for this salon
-    await _loadSalonServices();
-    
-    // ✅ Cleanup old queues (non-blocking, don't fail if error)
-    try {
-      await supabase.rpc('cleanup_old_queues');
-    } catch (e) {
-      debugPrint('⚠️ Cleanup queues failed (non-critical): $e');
+  Future<void> _initializeScreen() async {
+    // ✅ Check if initialSalon was passed (from SalonProfileScreen or dashboard)
+    if (widget.initialSalon != null && !_isInitialized) {
+      debugPrint('🎯 Initial salon received: ${widget.initialSalon!['name']}');
+
+      // ✅ Set the salon
+      setState(() {
+        _selectedSalon = widget.initialSalon;
+        _currentStep = 1; // Service step (skip salon selection)
+        _isInitialized = true;
+      });
+
+      // ✅ CRITICAL: Load services for this salon
+      await _loadSalonServices();
+
+      // ✅ Cleanup old queues (non-blocking, don't fail if error)
+      try {
+        await supabase.rpc('cleanup_old_queues');
+      } catch (e) {
+        debugPrint('⚠️ Cleanup queues failed (non-critical): $e');
+      }
+
+      debugPrint(
+        '✅ Initialization complete. Services: ${_salonServices.length}',
+      );
     }
-    
-    debugPrint('✅ Initialization complete. Services: ${_salonServices.length}');
   }
-}
 
   // ==================== HELPERS ====================
 
- int _calculateTotalDuration() => _selectedServices.fold(
-      0,
-      (sum, s) => sum + ((s['duration'] as num?)?.toInt() ?? 30),
-    );
+  int _calculateTotalDuration() => _selectedServices.fold(
+    0,
+    (sum, s) => sum + ((s['duration'] as num?)?.toInt() ?? 30),
+  );
 
   /// ✅ Subtotal (before any discounts)
   double _calculateTotalPrice() => _selectedServices.fold(
-      0.0,
-      (sum, s) => sum + ((s['price'] as num?)?.toDouble() ?? 0.0),
-    );
+    0.0,
+    (sum, s) => sum + ((s['price'] as num?)?.toDouble() ?? 0.0),
+  );
 
   /// ✅ Final total (after per-service discounts)
   double _getDisplayTotalPrice() {

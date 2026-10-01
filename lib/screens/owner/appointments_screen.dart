@@ -26,6 +26,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   String? _errorMessage;
   String _selectedFilter = 'today';
   String _selectedSalonName = '';
+  String _currencyCode = 'LKR';
   int _totalCount = 0;
   int _completedCount = 0;
   int _pendingCount = 0;
@@ -69,6 +70,27 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     super.dispose();
   }
 
+  // ============================================================
+  // ✅ CURRENCY SYMBOL
+  // ============================================================
+  String _currencySymbol(String? code) {
+    switch (code) {
+      case 'USD': return '\$';
+      case 'INR': return '₹';
+      case 'GBP': return '£';
+      case 'EUR': return '€';
+      case 'AUD': return 'A\$';
+      case 'AED': return 'د.إ';
+      case 'CAD': return 'C\$';
+      case 'JPY': return '¥';
+      case 'SGD': return 'S\$';
+      case 'MYR': return 'RM';
+      case 'LKR':
+      default:
+        return 'Rs.';
+    }
+  }
+
   Future<void> _loadData() async {
     setState(() {
       _isLoading = true;
@@ -86,14 +108,16 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       }
 
       if (widget.salonId != null) {
+        // ✅ Load salon info including currency
         final salonResponse = await supabase
             .from('salons')
-            .select('name')
+            .select('name, currency_code')
             .eq('id', int.parse(widget.salonId!))
             .maybeSingle();
 
         if (salonResponse != null) {
           _selectedSalonName = salonResponse['name'] ?? 'Salon';
+          _currencyCode = salonResponse['currency_code'] ?? 'LKR';
         }
 
         // ✅ Load barbers for this salon
@@ -109,75 +133,67 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     }
   }
 
-  // ✅ Load all barbers belonging to this salon
-// ✅ Load all barbers belonging to this salon (Manual Join)
-Future<void> _loadSalonBarbers() async {
-  if (widget.salonId == null) return;
+  // ============================================================
+  // ✅ LOAD BARBERS
+  // ============================================================
+  Future<void> _loadSalonBarbers() async {
+    if (widget.salonId == null) return;
 
-  try {
-    final salonIdInt = int.parse(widget.salonId!);
+    try {
+      final salonIdInt = int.parse(widget.salonId!);
 
-    // Step 1: Get active barber IDs from salon_barbers
-    final salonBarbersResponse = await supabase
-        .from('salon_barbers')
-        .select('barber_id')
-        .eq('salon_id', salonIdInt)
-        .eq('status', 'active');
+      // Step 1: Get active barber IDs from salon_barbers
+      final salonBarbersResponse = await supabase
+          .from('salon_barbers')
+          .select('barber_id')
+          .eq('salon_id', salonIdInt)
+          .eq('status', 'active');
 
-    final barberIds = (salonBarbersResponse as List)
-        .map((item) => item['barber_id'] as String)
-        .where((id) => id.isNotEmpty)
-        .toList();
+      final barberIds = (salonBarbersResponse as List)
+          .map((item) => item['barber_id'] as String)
+          .where((id) => id.isNotEmpty)
+          .toList();
 
-    if (barberIds.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _allBarbers = [];
+      if (barberIds.isEmpty) {
+        if (mounted) setState(() => _allBarbers = []);
+        return;
+      }
+
+      // Step 2: Fetch profiles for those barber IDs
+      final profilesResponse = await supabase
+          .from('profiles')
+          .select('id, full_name, email, phone, avatar_url')
+          .inFilter('id', barberIds)
+          .eq('is_active', true)
+          .eq('is_blocked', false);
+
+      final List<Map<String, dynamic>> barbers = [];
+      for (var profile in profilesResponse) {
+        barbers.add({
+          'id': profile['id'],
+          'full_name': profile['full_name'] ?? 'Unknown Barber',
+          'email': profile['email'] ?? '',
+          'phone': profile['phone'] ?? '',
+          'avatar_url': profile['avatar_url'],
         });
       }
-      return;
-    }
 
-    // Step 2: Fetch profiles for those barber IDs
-    final profilesResponse = await supabase
-        .from('profiles')
-        .select('id, full_name, email, phone, avatar_url')
-        .inFilter('id', barberIds)
-        .eq('is_active', true)
-        .eq('is_blocked', false);
+      barbers.sort(
+        (a, b) => (a['full_name'] as String)
+            .toLowerCase()
+            .compareTo((b['full_name'] as String).toLowerCase()),
+      );
 
-    final List<Map<String, dynamic>> barbers = [];
-    for (var profile in profilesResponse) {
-      barbers.add({
-        'id': profile['id'],
-        'full_name': profile['full_name'] ?? 'Unknown Barber',
-        'email': profile['email'] ?? '',
-        'phone': profile['phone'] ?? '',
-        'avatar_url': profile['avatar_url'],
-      });
-    }
-
-    // Sort alphabetically by name
-    barbers.sort((a, b) => (a['full_name'] as String)
-        .toLowerCase()
-        .compareTo((b['full_name'] as String).toLowerCase()));
-
-    if (mounted) {
-      setState(() {
-        _allBarbers = barbers;
-      });
-    }
-  } catch (e) {
-    debugPrint('Error loading barbers: $e');
-    if (mounted) {
-      setState(() {
-        _allBarbers = [];
-      });
+      if (mounted) setState(() => _allBarbers = barbers);
+    } catch (e) {
+      debugPrint('Error loading barbers: $e');
+      if (mounted) setState(() => _allBarbers = []);
     }
   }
-}
 
-  // ✅ Search barbers with debounce
+  // ============================================================
+  // ✅ SEARCH / FILTER BARBERS
+  // ============================================================
   void _onSearchChanged(String query) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 250), () {
@@ -197,9 +213,7 @@ Future<void> _loadSalonBarbers() async {
       return;
     }
 
-    setState(() {
-      _isSearchingBarbers = true;
-    });
+    setState(() => _isSearchingBarbers = true);
 
     final filtered = _allBarbers.where((b) {
       final name = (b['full_name'] as String? ?? '').toLowerCase();
@@ -214,7 +228,6 @@ Future<void> _loadSalonBarbers() async {
     });
   }
 
-  // ✅ Select a barber and reload appointments
   void _selectBarber(Map<String, dynamic> barber) {
     setState(() {
       _selectedBarber = barber;
@@ -226,7 +239,6 @@ Future<void> _loadSalonBarbers() async {
     _loadAppointments();
   }
 
-  // ✅ Clear barber selection
   void _clearBarberSelection() {
     setState(() {
       _selectedBarber = null;
@@ -238,30 +250,38 @@ Future<void> _loadSalonBarbers() async {
     _loadAppointments();
   }
 
+  // ============================================================
+  // ✅ LOAD APPOINTMENTS (NEW DB COMPATIBLE)
+  // ============================================================
   Future<void> _loadAppointments() async {
     try {
-      final salonIdInt = widget.salonId != null
-          ? int.parse(widget.salonId!)
-          : null;
+      final salonIdInt =
+          widget.salonId != null ? int.parse(widget.salonId!) : null;
       final today = DateTime.now().toIso8601String().split('T')[0];
 
+      // ✅ NEW DB: Join appointment_services (multi-service) instead of services
       var query = supabase.from('appointments').select('''
             id,
             booking_number,
             customer_id,
             barber_id,
+            salon_id,
             appointment_date,
             start_time,
             end_time,
             status,
             price,
-            service_id,
-            variant_id,
-            salon_id,
+            currency_code,
+            extra_charge,
+            extra_charge_note,
             queue_number,
+            regular_queue_number,
+            vip_queue_number,
             queue_token,
+            queue_position,
             is_vip,
             child_name,
+            travel_time_minutes,
             created_at,
             profiles!appointments_customer_id_fkey (
               id,
@@ -275,17 +295,43 @@ Future<void> _loadSalonBarbers() async {
               full_name,
               avatar_url
             ),
-            services!inner (
-              name,
-              description
-            ),
-            service_variants!left (
-              price,
-              duration
-            ),
             salons!inner (
               id,
-              name
+              name,
+              currency_code,
+              currency_symbol
+            ),
+            appointment_services (
+              id,
+              service_id,
+              variant_id,
+              barber_id,
+              price,
+              discount_amount,
+              discount_type,
+              offer_id,
+              final_price,
+              currency_code,
+              is_original,
+              added_at,
+              services!inner (
+                id,
+                name,
+                description
+              ),
+              service_variants (
+                id,
+                duration,
+                price,
+                salon_genders (display_name),
+                salon_age_categories (display_name)
+              ),
+              offers (
+                id,
+                title,
+                discount_type,
+                discount_value
+              )
             )
           ''');
 
@@ -293,7 +339,6 @@ Future<void> _loadSalonBarbers() async {
         query = query.eq('salon_id', salonIdInt);
       }
 
-      // ✅ Filter by selected barber
       if (_selectedBarber != null) {
         query = query.eq('barber_id', _selectedBarber!['id']);
       }
@@ -321,14 +366,74 @@ Future<void> _loadSalonBarbers() async {
       for (var apt in response) {
         final customer = apt['profiles'] as Map?;
         final barber = apt['barber_profiles'] as Map?;
-        final service = apt['services'] as Map?;
-        final variant = apt['service_variants'] as Map?;
         final salon = apt['salons'] as Map?;
 
         final status = apt['status'] as String? ?? 'pending';
         final aptDate = apt['appointment_date'] as String;
         final isToday = aptDate == today;
         final isVip = apt['is_vip'] as bool? ?? false;
+
+        // ✅ Process appointment_services (multi-service)
+        final apptServices = (apt['appointment_services'] as List?) ?? [];
+
+        final List<Map<String, dynamic>> services = [];
+        double servicesTotal = 0.0;
+        double totalDiscount = 0.0;
+        int totalDuration = 0;
+
+        for (var svc in apptServices) {
+          final serviceData = svc['services'] as Map?;
+          final variant = svc['service_variants'] as Map?;
+          final offer = svc['offers'] as Map?;
+
+          final price = (svc['price'] as num?)?.toDouble() ?? 0.0;
+          final discount = (svc['discount_amount'] as num?)?.toDouble() ?? 0.0;
+          final finalPrice = (svc['final_price'] as num?)?.toDouble() ?? 0.0;
+          final duration = (variant?['duration'] as num?)?.toInt() ?? 30;
+
+          servicesTotal += price;
+          totalDiscount += discount;
+          totalDuration += duration;
+
+          services.add({
+            'appointment_service_id': svc['id'],
+            'service_id': svc['service_id'],
+            'service_name': serviceData?['name'] ?? 'Service',
+            'service_description': serviceData?['description'],
+            'variant_id': svc['variant_id'],
+            'duration': duration,
+            'price': price,
+            'discount_amount': discount,
+            'discount_type': svc['discount_type'],
+            'final_price': finalPrice,
+            'is_original': svc['is_original'] ?? false,
+            'offer_id': svc['offer_id'],
+            'offer_title': offer?['title'],
+            'gender': variant?['salon_genders']?['display_name'],
+            'age': variant?['salon_age_categories']?['display_name'],
+            'currency_code': svc['currency_code'] ?? 'LKR',
+          });
+        }
+
+        // ✅ Extra charge
+        final extraCharge = (apt['extra_charge'] as num?)?.toDouble() ?? 0.0;
+        final extraNote = apt['extra_charge_note'] as String?;
+
+        // ✅ Total price = services - discount + extra charge
+        final totalPrice = servicesTotal - totalDiscount + extraCharge;
+        final currencyCode =
+            (salon?['currency_code'] as String?) ?? _currencyCode;
+
+        // ✅ Service summary
+        String serviceSummary;
+        if (services.isEmpty) {
+          serviceSummary = 'No services';
+        } else if (services.length == 1) {
+          serviceSummary = services.first['service_name'] as String;
+        } else {
+          serviceSummary =
+              '${services.first['service_name']} +${services.length - 1} more';
+        }
 
         total++;
         if (status == 'completed') {
@@ -340,33 +445,48 @@ Future<void> _loadSalonBarbers() async {
         } else if (status == 'cancelled' || status == 'no_show') {
           cancelled++;
         }
+
         appointments.add({
           'id': apt['id'],
           'booking_number': apt['booking_number'] ?? 'N/A',
+          'customer_id': apt['customer_id'],
           'customer_name': customer?['full_name'] ?? 'Unknown Customer',
           'customer_phone': customer?['phone'] ?? '',
           'customer_email': customer?['email'] ?? '',
           'customer_avatar': customer?['avatar_url'],
+          'barber_id': apt['barber_id'],
           'barber_name': barber?['full_name'] ?? 'Unknown Barber',
           'barber_avatar': barber?['avatar_url'],
-          'service_name': service?['name'] ?? 'Unknown Service',
-          'service_description': service?['description'],
-          'duration': variant?['duration'] ?? 30,
-          'price':
-              (apt['price'] as num?)?.toDouble() ??
-              (variant?['price'] as num?)?.toDouble() ??
-              0.0,
+          'salon_id': apt['salon_id'],
           'salon_name': salon?['name'] ?? 'Unknown Salon',
+          'currency_code': currencyCode,
+          // ✅ Multi-service
+          'services': services,
+          'service_count': services.length,
+          'service_name': serviceSummary, // backward compat
+          'duration': totalDuration,
+          // ✅ Price breakdown
+          'services_total': servicesTotal,
+          'total_discount': totalDiscount,
+          'extra_charge': extraCharge,
+          'extra_charge_note': extraNote,
+          'price': totalPrice,
+          // Time
           'appointment_date': aptDate,
           'is_today': isToday,
           'display_date': _formatDate(aptDate),
           'start_time': apt['start_time'],
           'end_time': apt['end_time'],
+          // Status
           'status': status,
           'is_vip': isVip,
           'queue_number': apt['queue_number'],
+          'regular_queue_number': apt['regular_queue_number'],
+          'vip_queue_number': apt['vip_queue_number'],
+          'queue_position': apt['queue_position'],
           'queue_token': apt['queue_token'],
           'child_name': apt['child_name'],
+          'travel_time_minutes': apt['travel_time_minutes'],
           'created_at': apt['created_at'],
         });
       }
@@ -380,6 +500,7 @@ Future<void> _loadSalonBarbers() async {
         _isLoading = false;
       });
     } catch (e) {
+      debugPrint('❌ Error loading appointments: $e');
       setState(() {
         _errorMessage = 'Error loading appointments: ${e.toString()}';
         _isLoading = false;
@@ -421,63 +542,42 @@ Future<void> _loadSalonBarbers() async {
 
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'completed':
-        return Colors.green;
-      case 'confirmed':
-        return Colors.blue;
-      case 'in_progress':
-        return Colors.orange;
-      case 'pending':
-        return Colors.orange;
-      case 'cancelled':
-        return Colors.red;
-      case 'no_show':
-        return Colors.red;
-      default:
-        return Colors.grey;
+      case 'completed': return Colors.green;
+      case 'confirmed': return Colors.blue;
+      case 'in_progress': return Colors.orange;
+      case 'pending': return Colors.orange;
+      case 'cancelled': return Colors.red;
+      case 'no_show': return Colors.red;
+      default: return Colors.grey;
     }
   }
 
   String _getStatusDisplay(String status) {
     switch (status) {
-      case 'completed':
-        return 'Completed';
-      case 'confirmed':
-        return 'Confirmed';
-      case 'in_progress':
-        return 'In Progress';
-      case 'pending':
-        return 'Pending';
-      case 'cancelled':
-        return 'Cancelled';
-      case 'no_show':
-        return 'No Show';
-      default:
-        return status;
+      case 'completed': return 'Completed';
+      case 'confirmed': return 'Confirmed';
+      case 'in_progress': return 'In Progress';
+      case 'pending': return 'Pending';
+      case 'cancelled': return 'Cancelled';
+      case 'no_show': return 'No Show';
+      default: return status;
     }
   }
 
   IconData _getStatusIcon(String status) {
     switch (status) {
-      case 'completed':
-        return Icons.check_circle;
-      case 'confirmed':
-        return Icons.check_circle_outline;
-      case 'in_progress':
-        return Icons.hourglass_top;
-      case 'pending':
-        return Icons.pending;
-      case 'cancelled':
-        return Icons.cancel;
-      case 'no_show':
-        return Icons.person_off;
-      default:
-        return Icons.info;
+      case 'completed': return Icons.check_circle;
+      case 'confirmed': return Icons.check_circle_outline;
+      case 'in_progress': return Icons.hourglass_top;
+      case 'pending': return Icons.pending;
+      case 'cancelled': return Icons.cancel;
+      case 'no_show': return Icons.person_off;
+      default: return Icons.info;
     }
   }
 
   // ============================================================
-  // ✅ BUILD METHOD - EDGE-TO-EDGE + RESPONSIVE
+  // ✅ BUILD METHOD
   // ============================================================
   @override
   Widget build(BuildContext context) {
@@ -494,8 +594,8 @@ Future<void> _loadSalonBarbers() async {
               _selectedFilter == 'today'
                   ? "Today's Appointments"
                   : _selectedFilter == 'pending'
-                  ? 'Pending Appointments'
-                  : 'All Appointments',
+                      ? 'Pending Appointments'
+                      : 'All Appointments',
               style: TextStyle(
                 fontSize: _isWeb ? 20 : 18,
                 fontWeight: FontWeight.bold,
@@ -526,25 +626,14 @@ Future<void> _loadSalonBarbers() async {
           PopupMenuButton<String>(
             icon: const Icon(Icons.filter_list, color: Colors.white),
             onSelected: (value) {
-              setState(() {
-                _selectedFilter = value;
-              });
+              setState(() => _selectedFilter = value);
               _loadAppointments();
             },
             color: _isDark ? const Color(0xFF1E1E1E) : Colors.white,
             itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'today',
-                child: Text('Today'),
-              ),
-              const PopupMenuItem(
-                value: 'pending',
-                child: Text('Pending'),
-              ),
-              const PopupMenuItem(
-                value: 'all',
-                child: Text('All'),
-              ),
+              const PopupMenuItem(value: 'today', child: Text('Today')),
+              const PopupMenuItem(value: 'pending', child: Text('Pending')),
+              const PopupMenuItem(value: 'all', child: Text('All')),
             ],
           ),
           IconButton(
@@ -554,14 +643,10 @@ Future<void> _loadSalonBarbers() async {
           ),
         ],
       ),
-      // ✅ EDGE-TO-EDGE: SafeArea with responsive body
       body: SafeArea(
         child: Column(
           children: [
-            // ✅ Barber Search Bar
             _buildBarberSearchBar(),
-
-            // ✅ Main Content
             Expanded(
               child: _isLoading
                   ? Center(
@@ -582,40 +667,46 @@ Future<void> _loadSalonBarbers() async {
                       ),
                     )
                   : _errorMessage != null
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            size: 64,
-                            color: _isDark ? Colors.white70 : Colors.grey[400],
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.error_outline,
+                                size: 64,
+                                color: _isDark
+                                    ? Colors.white70
+                                    : Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 24),
+                                child: Text(
+                                  _errorMessage!,
+                                  style: TextStyle(
+                                    color: _isDark
+                                        ? Colors.white60
+                                        : Colors.grey[600],
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              ElevatedButton(
+                                onPressed: _loadData,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primary,
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('Retry'),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _errorMessage!,
-                            style: TextStyle(
-                              color: _isDark
-                                  ? Colors.white60
-                                  : Colors.grey[600],
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton(
-                            onPressed: _loadData,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.primary,
-                              foregroundColor: Colors.white,
-                            ),
-                            child: const Text('Retry'),
-                          ),
-                        ],
-                      ),
-                    )
-                  : _isWeb
-                  ? _buildWebLayout()
-                  : _buildMobileLayout(),
+                        )
+                      : _isWeb
+                          ? _buildWebLayout()
+                          : _buildMobileLayout(),
             ),
           ],
         ),
@@ -632,7 +723,6 @@ Future<void> _loadSalonBarbers() async {
       color: _isDark ? const Color(0xFF1E1E1E) : Colors.grey[50],
       child: Column(
         children: [
-          // Search input field
           Container(
             decoration: BoxDecoration(
               color: _isDark ? const Color(0xFF2A2A2A) : Colors.white,
@@ -713,16 +803,13 @@ Future<void> _loadSalonBarbers() async {
             ),
           ),
 
-          // Selected barber chip
           if (_selectedBarber != null) ...[
             const SizedBox(height: 8),
             Row(
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
+                      horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: AppTheme.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
@@ -771,7 +858,6 @@ Future<void> _loadSalonBarbers() async {
             ),
           ],
 
-          // Suggestions dropdown
           if (_showSuggestions) ...[
             const SizedBox(height: 8),
             Container(
@@ -820,8 +906,8 @@ Future<void> _loadSalonBarbers() async {
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       itemCount: _barberSuggestions.length,
                       itemBuilder: (context, index) {
-                        final barber = _barberSuggestions[index];
-                        return _buildBarberSuggestionTile(barber);
+                        return _buildBarberSuggestionTile(
+                            _barberSuggestions[index]);
                       },
                     ),
             ),
@@ -918,7 +1004,6 @@ Future<void> _loadSalonBarbers() async {
     );
   }
 
-  // ✅ WEB LAYOUT - Centered with Scrollbar
   Widget _buildWebLayout() {
     return Center(
       child: Container(
@@ -941,7 +1026,6 @@ Future<void> _loadSalonBarbers() async {
     );
   }
 
-  // ✅ MOBILE LAYOUT
   Widget _buildMobileLayout() {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -950,11 +1034,9 @@ Future<void> _loadSalonBarbers() async {
     );
   }
 
-  // ✅ CONTENT
   Widget _buildContent() {
     return Column(
       children: [
-        // Stats summary - Responsive
         Container(
           margin: const EdgeInsets.all(16),
           padding: const EdgeInsets.all(12),
@@ -971,12 +1053,11 @@ Future<void> _loadSalonBarbers() async {
                   children: [
                     _buildStatItem('Total', '$_totalCount', Colors.blue),
                     _buildStatItem(
-                      'Completed',
-                      '$_completedCount',
-                      Colors.green,
-                    ),
-                    _buildStatItem('Pending', '$_pendingCount', Colors.orange),
-                    _buildStatItem('Cancelled', '$_cancelledCount', Colors.red),
+                        'Completed', '$_completedCount', Colors.green),
+                    _buildStatItem(
+                        'Pending', '$_pendingCount', Colors.orange),
+                    _buildStatItem(
+                        'Cancelled', '$_cancelledCount', Colors.red),
                   ],
                 )
               : SingleChildScrollView(
@@ -992,32 +1073,26 @@ Future<void> _loadSalonBarbers() async {
                         color: _isDark ? Colors.grey[800] : Colors.grey[300],
                       ),
                       _buildStatItem(
-                        'Completed',
-                        '$_completedCount',
-                        Colors.green,
-                      ),
-                      Container(
-                        width: 1,
-                        height: 30,
-                        color: _isDark ? Colors.grey[800] : Colors.grey[300],
-                      ),
-                      _buildStatItem('Pending', '$_pendingCount', Colors.orange),
+                          'Completed', '$_completedCount', Colors.green),
                       Container(
                         width: 1,
                         height: 30,
                         color: _isDark ? Colors.grey[800] : Colors.grey[300],
                       ),
                       _buildStatItem(
-                        'Cancelled',
-                        '$_cancelledCount',
-                        Colors.red,
+                          'Pending', '$_pendingCount', Colors.orange),
+                      Container(
+                        width: 1,
+                        height: 30,
+                        color: _isDark ? Colors.grey[800] : Colors.grey[300],
                       ),
+                      _buildStatItem(
+                          'Cancelled', '$_cancelledCount', Colors.red),
                     ],
                   ),
                 ),
         ),
 
-        // Appointments list
         _appointments.isEmpty
             ? Center(
                 child: Padding(
@@ -1035,10 +1110,10 @@ Future<void> _loadSalonBarbers() async {
                         _selectedBarber != null
                             ? 'No appointments for ${_selectedBarber!['full_name']}'
                             : _selectedFilter == 'today'
-                            ? 'No appointments today'
-                            : _selectedFilter == 'pending'
-                            ? 'No pending appointments'
-                            : 'No appointments found',
+                                ? 'No appointments today'
+                                : _selectedFilter == 'pending'
+                                    ? 'No pending appointments'
+                                    : 'No appointments found',
                         style: TextStyle(
                           fontSize: 16,
                           color: _isDark ? Colors.white60 : Colors.grey[600],
@@ -1074,30 +1149,31 @@ Future<void> _loadSalonBarbers() async {
                 ),
               )
             : _isWeb
-            ? GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 400,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 0.9,
-                ),
-                itemCount: _appointments.length,
-                itemBuilder: (context, index) {
-                  return _buildAppointmentCard(_appointments[index]);
-                },
-              )
-            : ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                itemCount: _appointments.length,
-                itemBuilder: (context, index) {
-                  return _buildAppointmentCard(_appointments[index]);
-                },
-              ),
+                ? GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 400,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                      childAspectRatio: 0.85,
+                    ),
+                    itemCount: _appointments.length,
+                    itemBuilder: (context, index) {
+                      return _buildAppointmentCard(_appointments[index]);
+                    },
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _appointments.length,
+                    itemBuilder: (context, index) {
+                      return _buildAppointmentCard(_appointments[index]);
+                    },
+                  ),
       ],
     );
   }
@@ -1128,7 +1204,9 @@ Future<void> _loadSalonBarbers() async {
     );
   }
 
-  // ✅ APPOINTMENT CARD - Dark Mode Aware
+  // ============================================================
+  // ✅ APPOINTMENT CARD
+  // ============================================================
   Widget _buildAppointmentCard(Map<String, dynamic> apt) {
     final status = apt['status'] as String;
     final statusColor = _getStatusColor(status);
@@ -1136,12 +1214,17 @@ Future<void> _loadSalonBarbers() async {
     final customerName = apt['customer_name'] as String;
     final customerAvatar = apt['customer_avatar'] as String?;
     final barberName = apt['barber_name'] as String;
-    final serviceName = apt['service_name'] as String;
-    final price = apt['price'] as double;
-    final startTime = _formatTime(apt['start_time']);
-    final endTime = _formatTime(apt['end_time']);
     final displayDate = apt['display_date'] as String;
     final isToday = apt['is_today'] as bool? ?? false;
+    final startTime = _formatTime(apt['start_time']);
+    final endTime = _formatTime(apt['end_time']);
+
+    final symbol = _currencySymbol(apt['currency_code'] as String?);
+    final services = (apt['services'] as List?) ?? [];
+    final totalPrice = (apt['price'] as num?)?.toDouble() ?? 0.0;
+    final extraCharge = (apt['extra_charge'] as num?)?.toDouble() ?? 0.0;
+    final totalDiscount = (apt['total_discount'] as num?)?.toDouble() ?? 0.0;
+    final duration = apt['duration'] as int? ?? 0;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1176,9 +1259,7 @@ Future<void> _loadSalonBarbers() async {
                   if (isVip)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
+                          horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: Colors.amber.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
@@ -1187,11 +1268,8 @@ Future<void> _loadSalonBarbers() async {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.star,
-                            size: 12,
-                            color: Colors.amber.shade700,
-                          ),
+                          Icon(Icons.star,
+                              size: 12, color: Colors.amber.shade700),
                           const SizedBox(width: 4),
                           Text(
                             'VIP',
@@ -1207,9 +1285,7 @@ Future<void> _loadSalonBarbers() async {
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
+                        horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: statusColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
@@ -1217,11 +1293,8 @@ Future<void> _loadSalonBarbers() async {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          _getStatusIcon(status),
-                          size: 14,
-                          color: statusColor,
-                        ),
+                        Icon(_getStatusIcon(status),
+                            size: 14, color: statusColor),
                         const SizedBox(width: 4),
                         Text(
                           _getStatusDisplay(status),
@@ -1238,7 +1311,7 @@ Future<void> _loadSalonBarbers() async {
               ),
               const SizedBox(height: 12),
 
-              // Customer & Barber
+              // Customer
               Row(
                 children: [
                   Container(
@@ -1279,7 +1352,8 @@ Future<void> _loadSalonBarbers() async {
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
-                                color: _isDark ? Colors.white60 : Colors.grey,
+                                color:
+                                    _isDark ? Colors.white60 : Colors.grey,
                               ),
                             ),
                           ),
@@ -1308,13 +1382,16 @@ Future<void> _loadSalonBarbers() async {
                                   : Colors.grey[500],
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              'Barber: $barberName',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: _isDark
-                                    ? Colors.white60
-                                    : Colors.grey[600],
+                            Expanded(
+                              child: Text(
+                                'Barber: $barberName',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: _isDark
+                                      ? Colors.white60
+                                      : Colors.grey[600],
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
@@ -1326,63 +1403,260 @@ Future<void> _loadSalonBarbers() async {
               ),
               const SizedBox(height: 12),
 
-              // Service & Time
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              // ✅ Services (multi-service display)
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: _isDark
+                      ? const Color(0xFF2A2A2A)
+                      : Colors.grey[50],
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color:
+                        _isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.content_cut,
+                            size: 12, color: AppTheme.primary),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Services (${services.length})',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: _isDark
+                                ? Colors.white60
+                                : Colors.grey[600],
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '$duration min',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: _isDark
+                                ? Colors.white60
+                                : Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (services.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Text(
+                          'No services',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _isDark
+                                ? Colors.white60
+                                : Colors.grey[600],
+                          ),
+                        ),
+                      )
+                    else
+                      ...services.take(3).map((s) {
+                        final sPrice =
+                            (s['final_price'] as num?)?.toDouble() ?? 0;
+                        final sDiscount =
+                            (s['discount_amount'] as num?)?.toDouble() ?? 0;
+                        final sOriginal =
+                            (s['price'] as num?)?.toDouble() ?? 0;
+                        final hasDiscount = sDiscount > 0;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '• ${s['service_name']}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: _isDark
+                                        ? Colors.white
+                                        : Colors.black87,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (hasDiscount)
+                                Icon(Icons.local_offer,
+                                    size: 10, color: Colors.green.shade700),
+                              const SizedBox(width: 4),
+                              if (hasDiscount)
+                                Text(
+                                  '$symbol${sOriginal.toStringAsFixed(0)}',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    decoration:
+                                        TextDecoration.lineThrough,
+                                    color: _isDark
+                                        ? Colors.white60
+                                        : Colors.grey,
+                                  ),
+                                ),
+                              if (hasDiscount) const SizedBox(width: 4),
+                              Text(
+                                '$symbol${(hasDiscount ? sPrice : sOriginal).toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: hasDiscount
+                                      ? Colors.green.shade700
+                                      : (_isDark
+                                          ? Colors.white
+                                          : Colors.black87),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    if (services.length > 3)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '+${services.length - 3} more service${services.length - 3 > 1 ? 's' : ''}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                            color: _isDark
+                                ? Colors.white60
+                                : Colors.grey[600],
+                          ),
+                        ),
+                      ),
+
+                    // ✅ Extra charge
+                    if (extraCharge > 0) ...[
+                      const Divider(height: 12),
+                      Row(
+                        children: [
+                          Icon(Icons.add_circle,
+                              size: 12, color: Colors.orange),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Extra Charge',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.orange),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '+$symbol${extraCharge.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.orange,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+
+                    // ✅ Discount summary
+                    if (totalDiscount > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.local_offer,
+                              size: 12, color: Colors.green.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Total Discount',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.green.shade700),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '−$symbol${totalDiscount.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.green.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+
+                    const Divider(height: 12),
+
+                    // ✅ Total
+                    Row(
                       children: [
                         Text(
-                          serviceName,
+                          'Total',
                           style: TextStyle(
-                            fontSize: _isWeb ? 15 : 14,
-                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
                             color: _isDark ? Colors.white : Colors.black87,
                           ),
                         ),
-                        const SizedBox(height: 2),
+                        const Spacer(),
                         Text(
-                          '${apt['duration']} min • Rs. ${price.toStringAsFixed(2)}',
+                          '$symbol${totalPrice.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: isVip
+                                ? Colors.amber.shade700
+                                : AppTheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Date/Time
+              Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Icon(Icons.calendar_today,
+                            size: 14,
+                            color: _isDark
+                                ? Colors.white60
+                                : Colors.grey[500]),
+                        const SizedBox(width: 4),
+                        Text(
+                          isToday ? 'Today' : displayDate,
                           style: TextStyle(
                             fontSize: 12,
-                            color: _isDark ? Colors.white60 : Colors.grey[600],
+                            color: isToday
+                                ? Colors.blue[700]
+                                : (_isDark
+                                    ? Colors.white70
+                                    : Colors.grey[700]),
+                            fontWeight: isToday
+                                ? FontWeight.w600
+                                : FontWeight.normal,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          isToday ? 'Today' : displayDate,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.blue[700],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$startTime - $endTime',
-                        style: TextStyle(
-                          fontSize: _isWeb ? 14 : 13,
-                          fontWeight: FontWeight.w500,
-                          color: _isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                    ],
+                  Icon(Icons.access_time,
+                      size: 14,
+                      color: _isDark ? Colors.white60 : Colors.grey[500]),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$startTime - $endTime',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: _isDark ? Colors.white : Colors.black87,
+                    ),
                   ),
                 ],
               ),
@@ -1394,37 +1668,39 @@ Future<void> _loadSalonBarbers() async {
   }
 
   void _viewAppointmentDetails(Map<String, dynamic> apt) {
-    final isDark = _isDark;
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+      backgroundColor:
+          _isDark ? const Color(0xFF1E1E1E) : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => AppointmentDetailsSheet(
         appointment: apt,
-        isDark: isDark,
+        isDark: _isDark,
         isWeb: _isWeb,
+        currencySymbol: _currencySymbol,
       ),
     );
   }
 }
 
 // ============================================================
-// APPOINTMENT DETAILS SHEET - Dark Mode Aware
+// APPOINTMENT DETAILS SHEET
 // ============================================================
 class AppointmentDetailsSheet extends StatelessWidget {
   final Map<String, dynamic> appointment;
   final bool isDark;
   final bool isWeb;
+  final String Function(String?) currencySymbol;
 
   const AppointmentDetailsSheet({
     super.key,
     required this.appointment,
     required this.isDark,
     required this.isWeb,
+    required this.currencySymbol,
   });
 
   @override
@@ -1434,9 +1710,6 @@ class AppointmentDetailsSheet extends StatelessWidget {
     final customerEmail = appointment['customer_email'] as String? ?? '';
     final customerAvatar = appointment['customer_avatar'] as String?;
     final barberName = appointment['barber_name'] as String;
-    final serviceName = appointment['service_name'] as String;
-    final price = appointment['price'] as double;
-    final duration = appointment['duration'] as int;
     final status = appointment['status'] as String;
     final statusColor = _getStatusColor(status);
     final isVip = appointment['is_vip'] as bool? ?? false;
@@ -1446,223 +1719,519 @@ class AppointmentDetailsSheet extends StatelessWidget {
     final bookingNumber = appointment['booking_number'] as String? ?? 'N/A';
     final childName = appointment['child_name'] as String?;
 
+    final symbol = currencySymbol(appointment['currency_code'] as String?);
+    final services = (appointment['services'] as List?) ?? [];
+    final servicesTotal =
+        (appointment['services_total'] as num?)?.toDouble() ?? 0;
+    final totalDiscount =
+        (appointment['total_discount'] as num?)?.toDouble() ?? 0;
+    final extraCharge =
+        (appointment['extra_charge'] as num?)?.toDouble() ?? 0;
+    final extraNote = appointment['extra_charge_note'] as String?;
+    final totalPrice = (appointment['price'] as num?)?.toDouble() ?? 0;
+    final duration = appointment['duration'] as int? ?? 0;
+    final queuePosition = appointment['queue_position'];
+    final regQueue = appointment['regular_queue_number'];
+    final vipQueue = appointment['vip_queue_number'];
+    final travelTime = appointment['travel_time_minutes'] ?? 0;
+
     return DraggableScrollableSheet(
-      initialChildSize: 0.7,
+      initialChildSize: 0.85,
       minChildSize: 0.5,
       maxChildSize: 0.95,
       expand: false,
       builder: (context, scrollController) {
         return Container(
-          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Handle
               Center(
                 child: Container(
                   width: 40,
                   height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
                   decoration: BoxDecoration(
                     color: isDark ? Colors.grey[700] : Colors.grey[300],
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Booking #$bookingNumber',
-                          style: TextStyle(
-                            fontSize: isWeb ? 18 : 16,
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: statusColor.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    _getStatusIcon(status),
-                                    size: 14,
-                                    color: statusColor,
+
+              // Scrollable content
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Booking #$bookingNumber',
+                                  style: TextStyle(
+                                    fontSize: isWeb ? 18 : 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.white
+                                        : Colors.black87,
                                   ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    _getStatusDisplay(status),
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: statusColor,
-                                      fontWeight: FontWeight.w600,
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: statusColor
+                                            .withValues(alpha: 0.1),
+                                        borderRadius:
+                                            BorderRadius.circular(20),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            _getStatusIcon(status),
+                                            size: 14,
+                                            color: statusColor,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            _getStatusDisplay(status),
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: statusColor,
+                                              fontWeight:
+                                                  FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (isVip) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.amber
+                                              .withValues(alpha: 0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                          border: Border.all(
+                                              color:
+                                                  Colors.amber.shade400),
+                                        ),
+                                        child: const Text(
+                                          '⭐ VIP',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.amber,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      const Divider(),
+
+                      // Customer
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isDark
+                                ? Colors.grey[800]
+                                : Colors.grey[200],
+                          ),
+                          child: customerAvatar != null &&
+                                  customerAvatar.isNotEmpty
+                              ? ClipOval(
+                                  child: CachedNetworkImage(
+                                    imageUrl: customerAvatar,
+                                    fit: BoxFit.cover,
+                                    width: 50,
+                                    height: 50,
+                                    errorWidget:
+                                        (context, url, error) => Center(
+                                      child: Text(
+                                        customerName.isNotEmpty
+                                            ? customerName[0]
+                                                .toUpperCase()
+                                            : '?',
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: isDark
+                                              ? Colors.white60
+                                              : Colors.grey,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                            if (isVip) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.amber.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: Colors.amber.shade400,
+                                )
+                              : Center(
+                                  child: Text(
+                                    customerName.isNotEmpty
+                                        ? customerName[0].toUpperCase()
+                                        : '?',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDark
+                                          ? Colors.white60
+                                          : Colors.grey,
+                                    ),
                                   ),
                                 ),
-                                child: const Text(
-                                  '⭐ VIP',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.amber,
-                                  ),
+                        ),
+                        title: Text(
+                          customerName,
+                          style: TextStyle(
+                            fontSize: isWeb ? 17 : 16,
+                            fontWeight: FontWeight.bold,
+                            color:
+                                isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (customerPhone.isNotEmpty)
+                              Text(
+                                customerPhone,
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.white70
+                                      : Colors.black87,
                                 ),
                               ),
-                            ],
+                            if (customerEmail.isNotEmpty)
+                              Text(
+                                customerEmail,
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.white60
+                                      : Colors.grey[600],
+                                ),
+                              ),
+                            if (childName != null && childName.isNotEmpty)
+                              Text(
+                                'Booked For: $childName',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? Colors.white60
+                                      : Colors.grey[600],
+                                ),
+                              ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              const Divider(),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isDark ? Colors.grey[800] : Colors.grey[200],
-                  ),
-                  child: customerAvatar != null && customerAvatar.isNotEmpty
-                      ? ClipOval(
-                          child: CachedNetworkImage(
-                            imageUrl: customerAvatar,
-                            fit: BoxFit.cover,
-                            width: 50,
-                            height: 50,
-                            errorWidget: (context, url, error) => Center(
-                              child: Text(
-                                customerName.isNotEmpty
-                                    ? customerName[0].toUpperCase()
-                                    : '?',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDark ? Colors.white60 : Colors.grey,
-                                ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      // ✅ Services breakdown
+                      if (services.isNotEmpty) ...[
+                        Text(
+                          'Services (${services.length})',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color:
+                                isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        ...services.map((s) {
+                          final sPrice =
+                              (s['price'] as num?)?.toDouble() ?? 0;
+                          final sDiscount = (s['discount_amount'] as num?)
+                                  ?.toDouble() ??
+                              0;
+                          final sFinal = (s['final_price'] as num?)
+                                  ?.toDouble() ??
+                              0;
+                          final sDuration =
+                              (s['duration'] as num?)?.toInt() ?? 30;
+                          final offerTitle = s['offer_title'] as String?;
+                          final gender = s['gender'] as String?;
+                          final age = s['age'] as String?;
+                          final isOriginal = s['is_original'] == true;
+
+                          final details = [
+                            if (gender != null && gender.isNotEmpty)
+                              gender,
+                            if (age != null && age.isNotEmpty) age,
+                            '$sDuration min',
+                          ].join(' • ');
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF2A2A2A)
+                                  : Colors.grey[50],
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.grey[800]!
+                                    : Colors.grey[200]!,
                               ),
                             ),
-                          ),
-                        )
-                      : Center(
-                          child: Text(
-                            customerName.isNotEmpty
-                                ? customerName[0].toUpperCase()
-                                : '?',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white60 : Colors.grey,
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Row(
+                                        children: [
+                                          Text(
+                                            s['service_name'] ?? 'Service',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark
+                                                  ? Colors.white
+                                                  : Colors.black87,
+                                            ),
+                                          ),
+                                          if (isOriginal)
+                                            Container(
+                                              margin: const EdgeInsets
+                                                  .only(left: 6),
+                                              padding:
+                                                  const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.primary
+                                                    .withValues(
+                                                        alpha: 0.15),
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                        6),
+                                              ),
+                                              child: Text(
+                                                'Original',
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  color: AppTheme.primary,
+                                                  fontWeight:
+                                                      FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (sDiscount > 0)
+                                      Text(
+                                        '$symbol${sPrice.toStringAsFixed(2)}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          decoration: TextDecoration
+                                              .lineThrough,
+                                          color: isDark
+                                              ? Colors.white60
+                                              : Colors.grey,
+                                        ),
+                                      ),
+                                    if (sDiscount > 0)
+                                      const SizedBox(width: 4),
+                                    Text(
+                                      '$symbol${(sDiscount > 0 ? sFinal : sPrice).toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: sDiscount > 0
+                                            ? Colors.green.shade700
+                                            : (isDark
+                                                ? Colors.white70
+                                                : Colors.black87),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  details,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDark
+                                        ? Colors.white60
+                                        : Colors.grey[600],
+                                  ),
+                                ),
+                                if (sDiscount > 0 &&
+                                    offerTitle != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                        top: 4),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.local_offer,
+                                          size: 11,
+                                          color:
+                                              Colors.green.shade700,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            '$offerTitle — save $symbol${sDiscount.toStringAsFixed(2)}',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color:
+                                                  Colors.green.shade700,
+                                              fontWeight:
+                                                  FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }),
+                        const SizedBox(height: 8),
+                      ],
+
+                      const Divider(),
+
+                      // Info
+                      _buildDetailRow('Barber', barberName),
+                      _buildDetailRow('Date', displayDate),
+                      _buildDetailRow(
+                        'Time',
+                        '${_formatTime(startTime)} - ${_formatTime(endTime)}',
+                      ),
+                      _buildDetailRow('Total Duration', '$duration min'),
+                      if (regQueue != null)
+                        _buildDetailRow(
+                            'Queue', 'Q$regQueue${queuePosition != null ? ' • Position $queuePosition' : ''}'),
+                      if (vipQueue != null)
+                        _buildDetailRow(
+                            'VIP Queue', 'VIP-$vipQueue${queuePosition != null ? ' • Position $queuePosition' : ''}'),
+                      if (travelTime > 0)
+                        _buildDetailRow('Travel Time', '$travelTime min'),
+
+                      const Divider(height: 20),
+
+                      // ✅ Price breakdown
+                      _buildPriceRow('Services Subtotal',
+                          '$symbol${servicesTotal.toStringAsFixed(2)}'),
+                      if (totalDiscount > 0)
+                        _buildPriceRow(
+                          'Total Discount',
+                          '−$symbol${totalDiscount.toStringAsFixed(2)}',
+                          color: Colors.green.shade700,
+                        ),
+                      if (extraCharge > 0)
+                        _buildPriceRow(
+                          extraNote != null && extraNote.isNotEmpty
+                              ? 'Extra Charge ($extraNote)'
+                              : 'Extra Charge',
+                          '+$symbol${extraCharge.toStringAsFixed(2)}',
+                          color: Colors.orange,
+                        ),
+
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: (isVip
+                                  ? Colors.amber
+                                  : AppTheme.primary)
+                              .withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment:
+                              MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Total',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.white
+                                    : Colors.black87,
+                              ),
+                            ),
+                            Text(
+                              '$symbol${totalPrice.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: isVip
+                                    ? Colors.amber.shade700
+                                    : AppTheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Close button
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close),
+                          label: const Text('Close'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor:
+                                isDark ? Colors.white : Colors.black87,
+                            side: BorderSide(
+                              color: isDark
+                                  ? Colors.grey[700]!
+                                  : Colors.grey[300]!,
+                            ),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                         ),
-                ),
-                title: Text(
-                  customerName,
-                  style: TextStyle(
-                    fontSize: isWeb ? 17 : 16,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ],
                   ),
                 ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (customerPhone.isNotEmpty)
-                      Text(
-                        customerPhone,
-                        style: TextStyle(
-                          color: isDark ? Colors.white70 : Colors.black87,
-                        ),
-                      ),
-                    if (customerEmail.isNotEmpty)
-                      Text(
-                        customerEmail,
-                        style: TextStyle(
-                          color: isDark ? Colors.white60 : Colors.grey[600],
-                        ),
-                      ),
-                    if (childName != null && childName.isNotEmpty)
-                      Text(
-                        'Child: $childName',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.white60 : Colors.grey[600],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              _buildDetailRow('Barber', barberName),
-              _buildDetailRow('Service', serviceName),
-              _buildDetailRow('Duration', '$duration minutes'),
-              _buildDetailRow('Price', 'Rs. ${price.toStringAsFixed(2)}'),
-              _buildDetailRow('Date', displayDate),
-              _buildDetailRow(
-                'Time',
-                '${_formatTime(startTime)} - ${_formatTime(endTime)}',
-              ),
-              if (appointment['queue_number'] != null)
-                _buildDetailRow('Queue', '#${appointment['queue_number']}'),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
-                      label: const Text('Close'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: isDark ? Colors.white : Colors.black87,
-                        side: BorderSide(
-                          color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
@@ -1678,7 +2247,7 @@ class AppointmentDetailsSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 80,
+            width: 120,
             child: Text(
               label,
               style: TextStyle(
@@ -1702,60 +2271,66 @@ class AppointmentDetailsSheet extends StatelessWidget {
     );
   }
 
+  Widget _buildPriceRow(String label, String value, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: color ??
+                  (isDark ? Colors.white70 : Colors.grey[700]),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: color ?? (isDark ? Colors.white : Colors.black87),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'completed':
-        return Colors.green;
-      case 'confirmed':
-        return Colors.blue;
-      case 'in_progress':
-        return Colors.orange;
-      case 'pending':
-        return Colors.orange;
-      case 'cancelled':
-        return Colors.red;
-      case 'no_show':
-        return Colors.red;
-      default:
-        return Colors.grey;
+      case 'completed': return Colors.green;
+      case 'confirmed': return Colors.blue;
+      case 'in_progress': return Colors.orange;
+      case 'pending': return Colors.orange;
+      case 'cancelled': return Colors.red;
+      case 'no_show': return Colors.red;
+      default: return Colors.grey;
     }
   }
 
   String _getStatusDisplay(String status) {
     switch (status) {
-      case 'completed':
-        return 'Completed';
-      case 'confirmed':
-        return 'Confirmed';
-      case 'in_progress':
-        return 'In Progress';
-      case 'pending':
-        return 'Pending';
-      case 'cancelled':
-        return 'Cancelled';
-      case 'no_show':
-        return 'No Show';
-      default:
-        return status;
+      case 'completed': return 'Completed';
+      case 'confirmed': return 'Confirmed';
+      case 'in_progress': return 'In Progress';
+      case 'pending': return 'Pending';
+      case 'cancelled': return 'Cancelled';
+      case 'no_show': return 'No Show';
+      default: return status;
     }
   }
 
   IconData _getStatusIcon(String status) {
     switch (status) {
-      case 'completed':
-        return Icons.check_circle;
-      case 'confirmed':
-        return Icons.check_circle_outline;
-      case 'in_progress':
-        return Icons.hourglass_top;
-      case 'pending':
-        return Icons.pending;
-      case 'cancelled':
-        return Icons.cancel;
-      case 'no_show':
-        return Icons.person_off;
-      default:
-        return Icons.info;
+      case 'completed': return Icons.check_circle;
+      case 'confirmed': return Icons.check_circle_outline;
+      case 'in_progress': return Icons.hourglass_top;
+      case 'pending': return Icons.pending;
+      case 'cancelled': return Icons.cancel;
+      case 'no_show': return Icons.person_off;
+      default: return Icons.info;
     }
   }
 

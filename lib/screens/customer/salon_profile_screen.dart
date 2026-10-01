@@ -566,9 +566,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
             Expanded(
               child: Text(
                 offer['title'],
-                style: context.titleLarge.copyWith(
-                  color: context.textColor,
-                ),
+                style: context.titleLarge.copyWith(color: context.textColor),
               ),
             ),
           ],
@@ -640,9 +638,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                 const SizedBox(width: 4),
                 Text(
                   'Valid until: ${DateFormat('MMM dd, yyyy').format(DateTime.parse(offer['valid_to']))}',
-                  style: context.bodySmall.copyWith(
-                    color: Colors.grey[500],
-                  ),
+                  style: context.bodySmall.copyWith(color: Colors.grey[500]),
                 ),
               ],
             ),
@@ -755,9 +751,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
               padding: const EdgeInsets.all(16),
               child: Text(
                 'All Offers',
-                style: context.titleLarge.copyWith(
-                  color: context.textColor,
-                ),
+                style: context.titleLarge.copyWith(color: context.textColor),
               ),
             ),
             Expanded(
@@ -872,9 +866,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
               child: Center(
                 child: Container(
                   width: contentWidth,
-                  constraints: BoxConstraints(
-                    maxHeight: constraints.maxHeight,
-                  ),
+                  constraints: BoxConstraints(maxHeight: constraints.maxHeight),
                   decoration: BoxDecoration(
                     color: context.backgroundColor,
                     boxShadow: [
@@ -886,7 +878,12 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                     ],
                   ),
                   child: _buildContent(
-                      isWeb, isTablet, openTime, closeTime, isOpen),
+                    isWeb,
+                    isTablet,
+                    openTime,
+                    closeTime,
+                    isOpen,
+                  ),
                 ),
               ),
             );
@@ -921,7 +918,12 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildSalonInfoSection(
-                        isWeb, isTablet, openTime, closeTime, isOpen),
+                      isWeb,
+                      isTablet,
+                      openTime,
+                      closeTime,
+                      isOpen,
+                    ),
                     const SizedBox(height: 24),
                     _buildBookingButtons(isWeb, isTablet),
                     const SizedBox(height: 32),
@@ -1007,11 +1009,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                     color: Colors.black.withValues(alpha: 0.3),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.share,
-                    color: Colors.white,
-                    size: 22,
-                  ),
+                  child: const Icon(Icons.share, color: Colors.white, size: 22),
                 ),
                 onPressed: () {},
               ),
@@ -1055,10 +1053,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 12,
               runSpacing: 8,
-              children: [
-                _buildWhatsAppButton(),
-                _buildFollowButton(),
-              ],
+              children: [_buildWhatsAppButton(), _buildFollowButton()],
             ),
           ),
         ],
@@ -1094,9 +1089,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
           children: [
             Text(
               widget.salon['name'] ?? 'Salon',
-              style: context.headlineMedium.copyWith(
-                color: context.textColor,
-              ),
+              style: context.headlineMedium.copyWith(color: context.textColor),
             ),
             const SizedBox(height: 6),
             if (!_isLoadingRating)
@@ -1275,11 +1268,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                   flex: 1,
                   child: OutlinedButton.icon(
                     onPressed: _navigateToVipBooking,
-                    icon: const Icon(
-                      Icons.star,
-                      color: Colors.amber,
-                      size: 20,
-                    ),
+                    icon: const Icon(Icons.star, color: Colors.amber, size: 20),
                     label: const Text(
                       'VIP',
                       style: TextStyle(
@@ -1333,11 +1322,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: _navigateToVipBooking,
-                    icon: const Icon(
-                      Icons.star,
-                      color: Colors.amber,
-                      size: 20,
-                    ),
+                    icon: const Icon(Icons.star, color: Colors.amber, size: 20),
                     label: const Text(
                       'VIP Booking',
                       style: TextStyle(
@@ -1375,9 +1360,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
             children: [
               Text(
                 '🔥 Special Offers',
-                style: context.titleLarge.copyWith(
-                  color: context.textColor,
-                ),
+                style: context.titleLarge.copyWith(color: context.textColor),
               ),
               if (_offers.length > 2)
                 TextButton(
@@ -1397,8 +1380,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
               ? const Center(
                   child: Padding(
                     padding: EdgeInsets.all(32),
-                    child:
-                        CircularProgressIndicator(color: Color(0xFFFF6B8B)),
+                    child: CircularProgressIndicator(color: Color(0xFFFF6B8B)),
                   ),
                 )
               : SizedBox(
@@ -1430,9 +1412,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
         children: [
           Text(
             'About',
-            style: context.titleLarge.copyWith(
-              color: context.textColor,
-            ),
+            style: context.titleLarge.copyWith(color: context.textColor),
           ),
           const SizedBox(height: 12),
           Container(
@@ -1466,9 +1446,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
         children: [
           Text(
             'Contact & Location',
-            style: context.titleLarge.copyWith(
-              color: context.textColor,
-            ),
+            style: context.titleLarge.copyWith(color: context.textColor),
           ),
           const SizedBox(height: 12),
           Container(
@@ -1490,8 +1468,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                       leading: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color:
-                              context.primaryColor.withValues(alpha: 0.1),
+                          color: context.primaryColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
@@ -1526,8 +1503,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                       leading: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color:
-                              context.primaryColor.withValues(alpha: 0.1),
+                          color: context.primaryColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
@@ -1562,8 +1538,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                       leading: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color:
-                              context.primaryColor.withValues(alpha: 0.1),
+                          color: context.primaryColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
@@ -1611,9 +1586,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
         children: [
           Text(
             'Popular Services',
-            style: context.titleLarge.copyWith(
-              color: context.textColor,
-            ),
+            style: context.titleLarge.copyWith(color: context.textColor),
           ),
           const SizedBox(height: 16),
           _buildServicesPreview(),
@@ -1651,8 +1624,7 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
           ),
         ],
         image: hasLogo
-            ? DecorationImage(
-                image: NetworkImage(logoUrl), fit: BoxFit.cover)
+            ? DecorationImage(image: NetworkImage(logoUrl), fit: BoxFit.cover)
             : null,
       ),
       child: !hasLogo
@@ -1711,16 +1683,14 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
     return OutlinedButton(
       onPressed: hasPhone ? _openWhatsApp : null,
       style: OutlinedButton.styleFrom(
-        foregroundColor:
-            hasPhone ? const Color(0xFF25D366) : context.secondaryTextColor,
+        foregroundColor: hasPhone
+            ? const Color(0xFF25D366)
+            : context.secondaryTextColor,
         side: BorderSide(
-          color: hasPhone
-              ? const Color(0xFF25D366)
-              : context.dividerColor,
+          color: hasPhone ? const Color(0xFF25D366) : context.dividerColor,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1746,8 +1716,9 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
       return ElevatedButton(
         onPressed: null,
         style: ElevatedButton.styleFrom(
-          backgroundColor:
-              context.isDarkMode ? Colors.grey[800] : Colors.grey[200],
+          backgroundColor: context.isDarkMode
+              ? Colors.grey[800]
+              : Colors.grey[200],
           foregroundColor: context.secondaryTextColor,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           shape: RoundedRectangleBorder(
@@ -1771,11 +1742,11 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
         backgroundColor: _isFollowing
             ? (context.isDarkMode ? Colors.grey[800] : Colors.grey[200])
             : context.primaryColor,
-        foregroundColor:
-            _isFollowing ? context.secondaryTextColor : Colors.white,
+        foregroundColor: _isFollowing
+            ? context.secondaryTextColor
+            : Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
         elevation: 0,
       ),
       child: Text(
@@ -1882,19 +1853,11 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: context.isDarkMode
-              ? [
-                  color.withValues(alpha: 0.15),
-                  const Color(0xFF1E1E1E),
-                ]
-              : [
-                  color.withValues(alpha: 0.1),
-                  Colors.white,
-                ],
+              ? [color.withValues(alpha: 0.15), const Color(0xFF1E1E1E)]
+              : [color.withValues(alpha: 0.1), Colors.white],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: color.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -1971,8 +1934,9 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                 Text(
                   offer['description'] ?? '',
                   style: context.bodySmall.copyWith(
-                    color:
-                        context.isDarkMode ? Colors.white60 : Colors.grey[600],
+                    color: context.isDarkMode
+                        ? Colors.white60
+                        : Colors.grey[600],
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -2018,8 +1982,8 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                         color: daysLeft <= 3
                             ? Colors.red.withValues(alpha: 0.1)
                             : (context.isDarkMode
-                                ? Colors.white10
-                                : Colors.grey.withValues(alpha: 0.1)),
+                                  ? Colors.white10
+                                  : Colors.grey.withValues(alpha: 0.1)),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -2031,8 +1995,8 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                             color: daysLeft <= 3
                                 ? Colors.red
                                 : (context.isDarkMode
-                                    ? Colors.white60
-                                    : Colors.grey[600]),
+                                      ? Colors.white60
+                                      : Colors.grey[600]),
                           ),
                           const SizedBox(width: 2),
                           Text(
@@ -2041,8 +2005,8 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                               color: daysLeft <= 3
                                   ? Colors.red
                                   : (context.isDarkMode
-                                      ? Colors.white60
-                                      : Colors.grey[600]),
+                                        ? Colors.white60
+                                        : Colors.grey[600]),
                             ),
                           ),
                         ],
@@ -2121,10 +2085,8 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
 
         return Column(
           children: services.map((service) {
-            final variants =
-                service['variants'] as List<Map<String, dynamic>>;
-            final lowestPrice =
-                (service['lowest_price'] as num?)?.toDouble();
+            final variants = service['variants'] as List<Map<String, dynamic>>;
+            final lowestPrice = (service['lowest_price'] as num?)?.toDouble();
             final hasPrice = service['has_price'] == true;
 
             return Container(
@@ -2141,10 +2103,11 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                   highlightColor: Colors.transparent,
                 ),
                 child: ExpansionTile(
-                  tilePadding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                  childrenPadding:
-                      const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                  tilePadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 4,
+                  ),
+                  childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
                   iconColor: context.primaryColor,
                   collapsedIconColor: context.secondaryTextColor,
                   leading: Container(
@@ -2167,7 +2130,8 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                       color: context.textColor,
                     ),
                   ),
-                  subtitle: (service['description'] != null &&
+                  subtitle:
+                      (service['description'] != null &&
                           (service['description'] as String).isNotEmpty)
                       ? Text(
                           service['description'],
@@ -2245,8 +2209,9 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
                               vertical: 8,
                             ),
                             decoration: BoxDecoration(
-                              color: context.backgroundColor
-                                  .withValues(alpha: 0.5),
+                              color: context.backgroundColor.withValues(
+                                alpha: 0.5,
+                              ),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(color: context.dividerColor),
                             ),
@@ -2316,14 +2281,16 @@ class _SalonProfileScreenState extends State<SalonProfileScreen> {
 
       if (servicesResponse.isEmpty) return [];
 
-      final serviceIds =
-          servicesResponse.map<int>((s) => s['id'] as int).toList();
+      final serviceIds = servicesResponse
+          .map<int>((s) => s['id'] as int)
+          .toList();
 
       // Step 2: variants for those services (only active ones)
       final variantsResponse = await supabase
           .from('service_variants')
           .select(
-              'id, service_id, price, duration, salon_gender_id, salon_age_category_id')
+            'id, service_id, price, duration, salon_gender_id, salon_age_category_id',
+          )
           .inFilter('service_id', serviceIds)
           .eq('is_active', true);
 

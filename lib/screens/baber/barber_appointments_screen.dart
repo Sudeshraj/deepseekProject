@@ -2873,8 +2873,6 @@ class _BarberAppointmentsScreenState extends State<BarberAppointmentsScreen>
     final subtotal = (_appointmentTotal?['subtotal'] as num?)?.toDouble() ?? 0;
     final discount =
         (_appointmentTotal?['total_discount'] as num?)?.toDouble() ?? 0;
-    final servicesTotal =
-        (_appointmentTotal?['services_total'] as num?)?.toDouble() ?? 0;
     final extraCharge =
         (_appointmentTotal?['extra_charge'] as num?)?.toDouble() ?? 0;
     final extraNote = _appointmentTotal?['extra_charge_note'] as String?;
@@ -3183,7 +3181,6 @@ class _BarberAppointmentsScreenState extends State<BarberAppointmentsScreen>
     final isCancelled = status == 'cancelled';
     final isVip = appointment['is_vip'] ?? false;
     final displayQueue = appointment['display_queue'] ?? '';
-    final queuePosition = appointment['queue_position'];
     final displayTime = appointment['display_time'];
     final hasEstimatedTime =
         appointment['estimated_start_time'].isNotEmpty &&
