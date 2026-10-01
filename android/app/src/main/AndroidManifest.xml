@@ -1,0 +1,289 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ================================================================ -->
+    <!-- 🔥 PERMISSIONS -->
+    <!-- ================================================================ -->
+
+    <!-- Network -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Notifications - Android 13+ (API 33+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    
+    <!-- Required for Android 16 background notifications -->   
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!-- ✅ Android 16 (API 36) Battery optimizations -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <!-- Vibration for notifications -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Camera -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Storage - Android 12 and below (API 32-) -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- Storage - Android 13+ (API 33+) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+
+    <!-- ================================================================ -->
+    <!-- 🔥 OPTIONAL HARDWARE FEATURES -->
+    <!-- ================================================================ -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+    <!-- ================================================================ -->
+    <!-- 🔥 APPLICATION -->
+    <!-- ================================================================ -->
+
+    <application
+        android:label="flutter_application_1"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true"
+        android:requestLegacyExternalStorage="true"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        tools:targetApi="33">
+
+        <!-- ================================================================ -->
+        <!-- 🔥 NOTIFICATION CHANNEL CONFIGURATION (FIXED)                   -->
+        <!-- ================================================================ -->
+
+        <!-- ✅ Default notification icon -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
+
+        <!-- ✅ Default notification color -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color" />
+
+        <!-- ✅ Default notification channel ID -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="salon_channel" />
+
+        <!-- ✅ Notification channel name (Android 8+ settings) -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_name"
+            android:value="Salon Booking Notifications" />
+
+        <!-- ✅ Notification channel description -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_description"
+            android:value="Notifications for salon booking updates, offers, and reminders" />
+
+        <!-- ================================================================ -->
+        <!-- 🔥 FIREBASE MESSAGING SERVICES (FIXED)                          -->
+        <!-- ================================================================ -->
+
+        <!-- ✅ Main FCM Service for receiving messages -->
+        <service
+            android:name="com.google.firebase.messaging.FirebaseMessagingService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- ✅ Required for FCM message forwarding (Android 12+) -->
+        <service
+            android:name="com.google.firebase.messaging.MessageForwardingService"
+            android:exported="false" />
+
+
+        <!-- ================================================================ -->
+        <!-- 🔥 ANDROID 16 (API 36) FOREGROUND SERVICE                        -->
+        <!-- ================================================================ -->
+        
+        <!-- ✅ WorkManager Background Sync Service -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
+
+        <!-- ================================================================ -->
+        <!-- 🔥 FACEBOOK LOGIN                                               -->
+        <!-- ================================================================ -->
+
+        <meta-data
+            android:name="com.facebook.sdk.ApplicationId"
+            android:value="@string/facebook_app_id" />
+
+        <meta-data
+            android:name="com.facebook.sdk.ClientToken"
+            android:value="@string/facebook_client_token" />
+
+        <activity
+            android:name="com.facebook.FacebookActivity"
+            android:configChanges="keyboard|keyboardHidden|screenLayout|screenSize|orientation"
+            android:label="@string/app_name" />
+
+        <activity
+            android:name="com.facebook.CustomTabActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="@string/fb_login_protocol_scheme" />
+            </intent-filter>
+        </activity>
+
+        <!-- ================================================================ -->
+        <!-- 🔥 MAIN ACTIVITY -->
+        <!-- ================================================================ -->
+
+        <activity
+            android:name=".MainActivity"
+            android:screenOrientation="portrait" 
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+
+            <!-- Normal Theme -->
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+
+            <!-- Launcher -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Custom URL Scheme: myapp:// -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />               
+            </intent-filter>
+
+            <!-- Android App Links -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="https"
+                    android:host="ifhenrgfpahandumdwmt.supabase.co"
+                    android:pathPrefix="/auth/v1/callback" />
+
+                <data
+                    android:scheme="https"
+                    android:host="yourdomain.com"
+                    android:pathPrefix="/auth/callback" />
+            </intent-filter>
+
+            <!-- Local development -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="https"
+                    android:host="localhost"
+                    android:pathPrefix="/auth/callback" />
+
+                <data
+                    android:scheme="http"
+                    android:host="localhost"
+                    android:pathPrefix="/auth/callback" />
+            </intent-filter>
+
+            <!-- Specific host intent filter -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="https"
+                    android:host="ifhenrgfpahandumdwmt.supabase.co"
+                    android:path="/auth/v1/callback" />
+
+                <data android:scheme="mailto" />
+                <data android:scheme="tel" />
+            </intent-filter>
+
+            <!-- Auth scheme intent filter -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="myapp" android:host="auth" />
+            </intent-filter>
+
+        </activity>
+
+        <!-- ================================================================ -->
+        <!-- 🔥 FLUTTER EMBEDDING -->
+        <!-- ================================================================ -->
+
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
+
+    </application>
+
+    <!-- ================================================================ -->
+    <!-- 🔥 TEXT PROCESSING & URL LAUNCHER (QUERIES)                     -->
+    <!-- ================================================================ -->
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
+        </intent>
+
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tel" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="sms" />
+        </intent>
+    </queries>
+
+</manifest>
