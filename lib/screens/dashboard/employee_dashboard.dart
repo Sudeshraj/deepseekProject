@@ -831,163 +831,12 @@ class _EmployeeDashboardState extends State<EmployeeDashboard> with RouteAware {
   // =====================================================
   // LOAD APPOINTMENTS WITH PERFORMANCE STATS
   // =====================================================
-  Future<void> _loadAppointments() async {
-    try {
-      final salonId = _selectedSalonId;
+Future<void> _loadAppointments() async {
+  try {
+    final salonId = _selectedSalonId;
 
-      if (salonId == null) {
-        debugPrint('⚠️ No salon selected');
-        setState(() {
-          _todaysAppointmentsList = [];
-          _todaysAppointments = 0;
-          _completedToday = 0;
-          _noShowToday = 0;
-          _onTimePercentage = 0;
-          _todayEarnings = 0;
-        });
-        return;
-      }
-
-      final salonIdInt = int.parse(salonId);
-
-      final today = DateTime.now();
-      final todayStr = today.toIso8601String().split('T').first;
-      final futureDate = today.add(const Duration(days: 30));
-      final futureStr = futureDate.toIso8601String().split('T').first;
-
-      debugPrint('📊 Loading appointments from $todayStr to $futureStr');
-
-      final response = await supabase
-          .from('appointments')
-          .select('''
-            id,
-            booking_number,
-            customer_id,
-            appointment_date,
-            start_time,
-            end_time,
-            status,
-            price,
-            service_id,
-            variant_id,
-            salon_id,
-            queue_number,
-            queue_token,
-            is_vip,
-            salons!inner (
-              id,
-              name
-            ),
-            services!inner (
-              name
-            ),
-            service_variants!left (
-              price,
-              duration,
-              salon_genders!left (display_name),
-              salon_age_categories!left (display_name)
-            ),
-            profiles!appointments_customer_id_fkey (
-              full_name,
-              email,
-              phone
-            )
-          ''')
-          .eq('barber_id', _employeeId)
-          .eq('salon_id', salonIdInt)
-          .gte('appointment_date', todayStr)
-          .lte('appointment_date', futureStr)
-          .neq('status', 'cancelled')
-          .neq('status', 'reassigned')
-          .neq('status', 'moved')
-          .neq('status', 'waiting_list')
-          .order('appointment_date', ascending: true)
-          .order('start_time', ascending: true);
-
-      debugPrint('📊 Found ${response.length} appointments');
-
-      final List<Map<String, dynamic>> allAppointments = [];
-
-      int todayTotal = 0;
-      int todayCompleted = 0;
-      int todayNoShow = 0;
-      int todayEarnings = 0;
-      int totalAppointmentsToday = 0;
-
-      for (var apt in response) {
-        final service = apt['services'] as Map?;
-        final variant = apt['service_variants'] as Map?;
-        final customer = apt['profiles'] as Map?;
-        final salon = apt['salons'] as Map?;
-
-        final status = apt['status'] as String? ?? 'pending';
-        final aptDate = apt['appointment_date'] as String;
-        final isToday = aptDate == todayStr;
-
-        final price =
-            (apt['price'] as num?)?.toDouble() ??
-            (variant?['price'] as num?)?.toDouble() ??
-            0.0;
-
-        final startTimeLocal = _utcToLocalTimeString(apt['start_time']);
-        final endTimeLocal = _utcToLocalTimeString(apt['end_time']);
-
-        if (isToday) {
-          todayTotal++;
-          totalAppointmentsToday++;
-
-          if (status == 'completed') {
-            todayCompleted++;
-            todayEarnings += price.toInt();
-          } else if (status == 'no_show') {
-            todayNoShow++;
-          }
-        }
-
-        allAppointments.add({
-          'id': apt['id'],
-          'booking_number': apt['booking_number'],
-          'customer_name': customer?['full_name'] ?? 'Unknown Customer',
-          'customer_phone': customer?['phone'] ?? '',
-          'service_name': service?['name'] ?? 'Unknown Service',
-          'salon_name': salon?['name'] ?? 'Unknown Salon',
-          'appointment_date': aptDate,
-          'is_today': isToday,
-          'display_date': _formatDateDisplay(aptDate),
-          'start_time': startTimeLocal,
-          'end_time': endTimeLocal,
-          'status': status,
-          'price': price,
-          'duration': variant?['duration'] ?? 30,
-          'is_vip': apt['is_vip'] ?? false,
-          'queue_number': apt['queue_number'],
-          'queue_token': apt['queue_token'],
-        });
-      }
-
-      // ✅ Calculate On Time Percentage
-      int onTimePercentage = 0;
-      if (totalAppointmentsToday > 0) {
-        onTimePercentage = ((todayCompleted / totalAppointmentsToday) * 100)
-            .round();
-      }
-
-      setState(() {
-        _todaysAppointmentsList = allAppointments;
-        _todaysAppointments = todayTotal;
-        _completedToday = todayCompleted;
-        _noShowToday = todayNoShow;
-        _onTimePercentage = onTimePercentage;
-        _todayEarnings = todayEarnings;
-      });
-
-      debugPrint('✅ Today: $_todaysAppointments appointments');
-      debugPrint('✅ Today Completed: $_completedToday');
-      debugPrint('✅ Today No-Show: $_noShowToday');
-      debugPrint('✅ On Time: $_onTimePercentage%');
-      debugPrint('✅ Total appointments in list: ${allAppointments.length}');
-    } catch (e) {
-      debugPrint('❌ Error loading appointments: $e');
+    if (salonId == null) {
+      debugPrint('⚠️ No salon selected');
       setState(() {
         _todaysAppointmentsList = [];
         _todaysAppointments = 0;
@@ -996,8 +845,214 @@ class _EmployeeDashboardState extends State<EmployeeDashboard> with RouteAware {
         _onTimePercentage = 0;
         _todayEarnings = 0;
       });
+      return;
     }
+
+    final salonIdInt = int.parse(salonId);
+
+    final today = DateTime.now();
+    final todayStr = today.toIso8601String().split('T').first;
+    final futureDate = today.add(const Duration(days: 30));
+    final futureStr = futureDate.toIso8601String().split('T').first;
+
+    debugPrint('📊 Loading appointments from $todayStr to $futureStr');
+
+    // ✅ FIX: Correct schema — no service_id/variant_id in appointments
+    final response = await supabase
+        .from('appointments')
+        .select('''
+          id,
+          booking_number,
+          customer_id,
+          appointment_date,
+          start_time,
+          end_time,
+          status,
+          price,
+          currency_code,
+          extra_charge,
+          extra_charge_note,
+          salon_id,
+          queue_number,
+          queue_token,
+          is_vip,
+          is_started,
+          is_completed,
+          salons!inner (
+            id,
+            name
+          ),
+          profiles!appointments_customer_id_fkey (
+            full_name,
+            email,
+            phone
+          )
+        ''')
+        .eq('barber_id', _employeeId)
+        .eq('salon_id', salonIdInt)
+        .gte('appointment_date', todayStr)
+        .lte('appointment_date', futureStr)
+        .neq('status', 'cancelled')
+        .neq('status', 'reassigned')
+        .neq('status', 'moved')
+        .neq('status', 'waiting_list')
+        .order('appointment_date', ascending: true)
+        .order('start_time', ascending: true);
+
+    debugPrint('📊 Found ${response.length} appointments');
+
+    // ✅ NEW: Fetch services from appointment_services
+    final appointmentIds = response.map((a) => a['id'] as int).toList();
+
+    Map<int, List<Map<String, dynamic>>> servicesByAppointment = {};
+    Map<int, double> servicesTotalByAppointment = {};
+
+    if (appointmentIds.isNotEmpty) {
+      final apptServices = await supabase
+          .from('appointment_services')
+          .select('''
+            id,
+            appointment_id,
+            service_id,
+            variant_id,
+            price,
+            discount_amount,
+            final_price,
+            currency_code,
+            is_original,
+            services!inner (name),
+            service_variants (duration)
+          ''')
+          .inFilter('appointment_id', appointmentIds);
+
+      for (var svc in apptServices) {
+        final aptId = svc['appointment_id'] as int;
+        servicesByAppointment.putIfAbsent(aptId, () => []).add({
+          'appointment_service_id': svc['id'],
+          'service_id': svc['service_id'],
+          'variant_id': svc['variant_id'],
+          'service_name': svc['services']?['name'] ?? 'Service',
+          'duration': svc['service_variants']?['duration'] ?? 30,
+          'price': (svc['price'] as num?)?.toDouble() ?? 0.0,
+          'discount_amount':
+              (svc['discount_amount'] as num?)?.toDouble() ?? 0.0,
+          'final_price': (svc['final_price'] as num?)?.toDouble() ?? 0.0,
+          'currency_code': svc['currency_code'] ?? 'LKR',
+          'is_original': svc['is_original'] ?? false,
+        });
+
+        servicesTotalByAppointment[aptId] =
+            (servicesTotalByAppointment[aptId] ?? 0.0) +
+                ((svc['final_price'] as num?)?.toDouble() ?? 0.0);
+      }
+    }
+
+    final List<Map<String, dynamic>> allAppointments = [];
+
+    int todayTotal = 0;
+    int todayCompleted = 0;
+    int todayNoShow = 0;
+    int todayEarnings = 0;
+    int totalAppointmentsToday = 0;
+
+    for (var apt in response) {
+      final customer = apt['profiles'] as Map?;
+      final salon = apt['salons'] as Map?;
+
+      final status = apt['status'] as String? ?? 'pending';
+      final aptDate = apt['appointment_date'] as String;
+      final isToday = aptDate == todayStr;
+
+      final servicesTotal = servicesTotalByAppointment[apt['id']] ?? 0.0;
+      final extraCharge = (apt['extra_charge'] as num?)?.toDouble() ?? 0.0;
+      final price = servicesTotal + extraCharge;
+
+      final startTimeLocal = _utcToLocalTimeString(apt['start_time']);
+      final endTimeLocal = _utcToLocalTimeString(apt['end_time']);
+
+      final services = servicesByAppointment[apt['id']] ?? [];
+
+      String serviceSummary;
+      if (services.isEmpty) {
+        serviceSummary = 'No services';
+      } else if (services.length == 1) {
+        serviceSummary = services.first['service_name'] as String;
+      } else {
+        serviceSummary =
+            '${services.first['service_name']} +${services.length - 1} more';
+      }
+
+      if (isToday) {
+        todayTotal++;
+        totalAppointmentsToday++;
+
+        if (status == 'completed') {
+          todayCompleted++;
+          todayEarnings += price.toInt();
+        } else if (status == 'no_show') {
+          todayNoShow++;
+        }
+      }
+
+      allAppointments.add({
+        'id': apt['id'],
+        'booking_number': apt['booking_number'],
+        'customer_name': customer?['full_name'] ?? 'Unknown Customer',
+        'customer_phone': customer?['phone'] ?? '',
+        'service_name': serviceSummary,
+        'services': services,
+        'salon_name': salon?['name'] ?? 'Unknown Salon',
+        'appointment_date': aptDate,
+        'is_today': isToday,
+        'display_date': _formatDateDisplay(aptDate),
+        'start_time': startTimeLocal,
+        'end_time': endTimeLocal,
+        'status': status,
+        'price': price,
+        'services_total': servicesTotal,
+        'extra_charge': extraCharge,
+        'duration': 30,
+        'is_vip': apt['is_vip'] ?? false,
+        'queue_number': apt['queue_number'],
+        'queue_token': apt['queue_token'],
+        'is_started': apt['is_started'] ?? false,
+        'is_completed': apt['is_completed'] ?? false,
+      });
+    }
+
+    int onTimePercentage = 0;
+    if (totalAppointmentsToday > 0) {
+      onTimePercentage = ((todayCompleted / totalAppointmentsToday) * 100)
+          .round();
+    }
+
+    setState(() {
+      _todaysAppointmentsList = allAppointments;
+      _todaysAppointments = todayTotal;
+      _completedToday = todayCompleted;
+      _noShowToday = todayNoShow;
+      _onTimePercentage = onTimePercentage;
+      _todayEarnings = todayEarnings;
+    });
+
+    debugPrint('✅ Today: $_todaysAppointments appointments');
+    debugPrint('✅ Today Completed: $_completedToday');
+    debugPrint('✅ Today No-Show: $_noShowToday');
+    debugPrint('✅ On Time: $_onTimePercentage%');
+    debugPrint('✅ Total appointments in list: ${allAppointments.length}');
+  } catch (e, stackTrace) {
+    debugPrint('❌ Error loading appointments: $e');
+    debugPrint('📚 Stack: $stackTrace');
+    setState(() {
+      _todaysAppointmentsList = [];
+      _todaysAppointments = 0;
+      _completedToday = 0;
+      _noShowToday = 0;
+      _onTimePercentage = 0;
+      _todayEarnings = 0;
+    });
   }
+}
 
   // =====================================================
   // LOAD STATISTICS

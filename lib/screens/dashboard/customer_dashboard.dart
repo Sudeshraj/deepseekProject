@@ -625,143 +625,174 @@ class _CustomerDashboardState extends State<CustomerDashboard>
   // LOAD DASHBOARD DATA
   // ============================================================
 
-  Future<void> _loadDashboardData() async {
-    if (!mounted) return;
-    setState(() => _isLoading = true);
+Future<void> _loadDashboardData() async {
+  if (!mounted) return;
+  setState(() => _isLoading = true);
 
-    try {
-      final user = supabase.auth.currentUser;
-      if (user == null) {
-        if (mounted) setState(() => _isLoading = false);
-        return;
-      }
+  try {
+    final user = supabase.auth.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
 
-      await _checkCustomerStatus();
-      if (!_isActive) {
-        if (mounted) setState(() => _isLoading = false);
-        return;
-      }
+    await _checkCustomerStatus();
+    if (!_isActive) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
 
-      await _loadFollowedSalons(user.id);
+    await _loadFollowedSalons(user.id);
 
-      final appointments = await supabase
-          .from('appointments')
-          .select('''
-            id,
-            booking_number,
-            appointment_date,
-            start_time,
-            end_time,
-            status,
-            is_vip,
-            vip_booking_id,
-            price,
-            queue_number,
-            queue_token,
-            barber_id,
-            service_id,
-            variant_id,
-            services!inner (
-              name
-            ),
-            service_variants!left (
-              price,
-              duration,
-              salon_genders!left (display_name),
-              salon_age_categories!left (display_name)
-            )
-          ''')
-          .eq('customer_id', user.id)
-          .order('appointment_date', ascending: false);
+    // ✅ NEW: Fetch appointments WITHOUT old service_id/variant_id joins
+    final appointments = await supabase
+        .from('appointments')
+        .select('''
+          id,
+          booking_number,
+          appointment_date,
+          start_time,
+          end_time,
+          status,
+          is_vip,
+          vip_booking_id,
+          price,
+          currency_code,
+          extra_charge,
+          extra_charge_note,
+          queue_number,
+          queue_token,
+          barber_id,
+          salon_id
+        ''')
+        .eq('customer_id', user.id)
+        .order('appointment_date', ascending: false);
 
-      int upcoming = 0;
-      int pending = 0;
-      int completed = 0;
-      int cancelled = 0;
-      int vip = 0;
-      int pendingVip = 0;
-      double totalSpent = 0.0;
-
-      for (var apt in appointments) {
-        final status = apt['status'] as String;
-        final isVip = apt['is_vip'] == true;
-
-        final double price =
-            (apt['price'] as num?)?.toDouble() ??
-            (apt['service_variants']?['price'] as num?)?.toDouble() ??
-            0.0;
-
-        if (status == 'confirmed' || status == 'pending') {
-          final dateStr = apt['appointment_date'] as String;
-          final date = DateTime.parse(dateStr);
-          if (date.isAfter(DateTime.now().subtract(const Duration(days: 1)))) {
-            upcoming++;
-          }
-        }
-
-        if (status == 'pending') pending++;
-        if (status == 'completed') {
-          completed++;
-          totalSpent += price;
-        }
-        if (status == 'cancelled') cancelled++;
-
-        if (isVip) {
-          vip++;
-          if (status == 'pending') pendingVip++;
-        }
-      }
-
-      final favoriteBarbers = await _getFavoriteBarbers(user.id);
-      final offers = await _loadOffersFromDatabase();
-
-      await _loadUnreadCount();
-
+    if (appointments.isEmpty) {
       if (mounted) {
         setState(() {
-          _upcomingBookings = upcoming;
-          pendingBookings = pending;
-          _completedBookings = completed;
-          _cancelledBookings = cancelled;
-          _vipBookings = vip;
-          _pendingVipBookings = pendingVip;
-          _totalSpent = totalSpent.toInt();
-          _loyaltyPoints = (totalSpent / 10).round();
-          _favoriteBarbers = favoriteBarbers;
-          _offers = offers;
+          _upcomingBookings = 0;
+          pendingBookings = 0;
+          _completedBookings = 0;
+          _cancelledBookings = 0;
+          _vipBookings = 0;
+          _pendingVipBookings = 0;
+          _totalSpent = 0;
+          _loyaltyPoints = 0;
+          _isLoading = false;
         });
       }
+      return;
+    }
 
-      _hasPermission = await _notificationService.hasPermission();
+    // ✅ NEW: Fetch appointment_services for these appointments
+    final appointmentIds =
+        appointments.map((a) => a['id'] as int).toList();
 
-      if (!_hasPermission) {
-        _showPermissionCard = await _permissionManager.shouldShowPermissionCard(
-          screen: 'customer_dashboard',
-          action: null,
-        );
+    Map<int, double> servicesTotalByAppointment = {};
 
-        if (UniversalPlatform.isWeb && _showPermissionCard) {
-          final status = await _notificationService.getWebPermissionStatus();
-          if (status == 'denied') {
-            _showPermissionCard = false;
-            if (mounted) {
-              _showWebPermissionHelp();
-            }
-          }
+    if (appointmentIds.isNotEmpty) {
+      final apptServices = await supabase
+          .from('appointment_services')
+          .select('appointment_id, final_price, price')
+          .inFilter('appointment_id', appointmentIds);
+
+      for (var svc in apptServices) {
+        final aptId = svc['appointment_id'] as int;
+        servicesTotalByAppointment[aptId] =
+            (servicesTotalByAppointment[aptId] ?? 0.0) +
+                ((svc['final_price'] as num?)?.toDouble() ?? 0.0);
+      }
+    }
+
+    int upcoming = 0;
+    int pending = 0;
+    int completed = 0;
+    int cancelled = 0;
+    int vip = 0;
+    int pendingVip = 0;
+    double totalSpent = 0.0;
+
+    for (var apt in appointments) {
+      final status = apt['status'] as String;
+      final isVip = apt['is_vip'] == true;
+
+      // ✅ Use appointment.price (already auto-synced = services + extra_charge)
+      final double price = (apt['price'] as num?)?.toDouble() ?? 0.0;
+
+      if (status == 'confirmed' || status == 'pending') {
+        final dateStr = apt['appointment_date'] as String;
+        final date = DateTime.parse(dateStr);
+        if (date.isAfter(
+            DateTime.now().subtract(const Duration(days: 1)))) {
+          upcoming++;
         }
-      } else {
-        _showPermissionCard = false;
       }
 
-      debugPrint(
-        '✅ Dashboard loaded: $upcoming upcoming, ${offers.length} offers, $_unreadNotificationCount unread notifications',
-      );
-    } catch (e) {
-      debugPrint('❌ Error loading dashboard data: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (status == 'pending') pending++;
+      if (status == 'completed') {
+        completed++;
+        totalSpent += price;
+      }
+      if (status == 'cancelled') cancelled++;
+
+      if (isVip) {
+        vip++;
+        if (status == 'pending') pendingVip++;
+      }
     }
+
+    final favoriteBarbers = await _getFavoriteBarbers(user.id);
+    final offers = await _loadOffersFromDatabase();
+
+    await _loadUnreadCount();
+
+    if (mounted) {
+      setState(() {
+        _upcomingBookings = upcoming;
+        pendingBookings = pending;
+        _completedBookings = completed;
+        _cancelledBookings = cancelled;
+        _vipBookings = vip;
+        _pendingVipBookings = pendingVip;
+        _totalSpent = totalSpent.toInt();
+        _loyaltyPoints = (totalSpent / 10).round();
+        _favoriteBarbers = favoriteBarbers;
+        _offers = offers;
+      });
+    }
+
+    _hasPermission = await _notificationService.hasPermission();
+
+    if (!_hasPermission) {
+      _showPermissionCard =
+          await _permissionManager.shouldShowPermissionCard(
+        screen: 'customer_dashboard',
+        action: null,
+      );
+
+      if (UniversalPlatform.isWeb && _showPermissionCard) {
+        final status = await _notificationService.getWebPermissionStatus();
+        if (status == 'denied') {
+          _showPermissionCard = false;
+          if (mounted) {
+            _showWebPermissionHelp();
+          }
+        }
+      }
+    } else {
+      _showPermissionCard = false;
+    }
+
+    debugPrint(
+      '✅ Dashboard loaded: $upcoming upcoming, ${offers.length} offers, $_unreadNotificationCount unread',
+    );
+  } catch (e) {
+    debugPrint('❌ Error loading dashboard data: $e');
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
   }
+}
 
   // ============================================================
   // GET FAVORITE BARBERS
